@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: java-pgvector
+
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:55432/java_pgvector?options=-c%20timezone=UTC
+    username: postgres
+    password: postgres
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 10000
+  sql:
+    init:
+      # Local exercise only. Use a migration tool and a separate migration role in production.
+      mode: always
+  jdbc:
+    template:
+      query-timeout: 15s
+  ai:
+    model:
+      # Keep chat disabled in this standalone retrieval lesson.
+      chat: none
+      embedding: ollama
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      init:
+        pull-model-strategy: never
+      chat:
+        options:
+          model: llama3.2:3b
+          temperature: 0.7
+      embedding:
+        options:
+          model: nomic-embed-text
+          # Do not silently discard text that exceeds the model's context window.
+          truncate: false
+
+app:
+  embedding-dimensions: 768
