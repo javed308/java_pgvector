@@ -2,6 +2,15 @@ spring:
   application:
     name: java-pgvector
 
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+      resolve-lazily: true
+
+
+
   datasource:
     url: jdbc:postgresql://127.0.0.1:55432/java_pgvector?options=-c%20timezone=UTC
     username: postgres
@@ -37,3 +46,8 @@ spring:
 
 app:
   embedding-dimensions: 768
+
+rag:
+  parser:
+    max-input-bytes: 10485760
+    max-characters: 1000000
