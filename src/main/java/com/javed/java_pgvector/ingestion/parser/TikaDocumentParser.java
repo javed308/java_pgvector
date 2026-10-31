@@ -1,6 +1,9 @@
 package com.javed.java_pgvector.ingestion.parser;
 
 import com.javed.java_pgvector.dto.ParsedDocument;
+import com.javed.java_pgvector.dto.StructuredDocument;
+import org.apache.tika.parser.html.HtmlMapper;
+import org.apache.tika.sax.TeeContentHandler;
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.exception.WriteLimitReachedException;
 import org.apache.tika.extractor.EmbeddedDocumentExtractor;
@@ -48,7 +51,16 @@ public class TikaDocumentParser implements DocumentParser{
 
     @Override
     public ParsedDocument parse(InputStream input, String fileName) throws IOException {
+        return parseInternal(input, fileName, false).source();
+    }
 
+    @Override
+    public StructuredDocument parseStructured(InputStream input, String fileName) throws IOException {
+        return parseInternal(input, fileName, true);
+    }
+
+    private StructuredDocument parseInternal(InputStream input, String fileName, boolean collectStructure)
+            throws IOException {
         Objects.requireNonNull(input, "input");
 
         //Bounded buffering for this small-file lesson, not an unbounded readAllBytes().
@@ -75,7 +87,15 @@ public class TikaDocumentParser implements DocumentParser{
                         "Only PDF, DOCX, TXT and HTML are supported.");
             }
 
-            parser.parse(stream, handler, metadata, context);
+            StructureContentHandler structure = null;
+            ContentHandler output = handler;
+            if (collectStructure) {
+                structure = new StructureContentHandler(contentType.equals("application/pdf"), maxCharacters);
+                // Preserve HTML landmarks; do not change the existing raw /parse endpoint.
+                context.set(HtmlMapper.class, new CleaningHtmlMapper());
+                output = new TeeContentHandler(handler, structure);
+            }
+            parser.parse(stream, output, metadata, context);
             String text = handler.toString();
             if (text.isBlank()) {
                 throw new DocumentParsingException(NO_TEXT,
@@ -86,16 +106,27 @@ public class TikaDocumentParser implements DocumentParser{
             for (String key : metadata.names()) {
                 values.put(key, List.of(metadata.getValues(key)));
             }
-            return new ParsedDocument(name, contentType, text, values);
+            ParsedDocument parsed = new ParsedDocument(name, contentType, text, values);
+            return structure == null ? StructuredDocument.plain(parsed)
+                    : new StructuredDocument(parsed, structure.blocks(), structure.pageCount());
 
         }catch (TikaException | SAXException | IOException ex) {
-            if (WriteLimitReachedException.isWriteLimitReached(ex)) {
+            if (WriteLimitReachedException.isWriteLimitReached(ex) || hasStructureLimitCause(ex)) {
                 throw new DocumentParsingException(TEXT_TOO_LARGE,
                         "Extracted text exceeds the configured character limit.", ex);
             }
             throw new DocumentParsingException(PARSE_FAILED,
                     "The document could not be parsed. It may be damaged or encrypted.", ex);
         }
+    }
+
+    private static boolean hasStructureLimitCause(Throwable cause) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (cause != null && seen.add(cause)) {
+            if (cause instanceof StructureContentHandler.LimitExceededException) return true;
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     private static ParseContext newContext() {

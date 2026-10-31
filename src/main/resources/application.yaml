@@ -51,3 +51,9 @@ rag:
   parser:
     max-input-bytes: 10485760
     max-characters: 1000000
+  cleaner:
+    remove-marked-boilerplate: true
+    # OFF by default: repeated body text can be mistaken for a running margin.
+    detect-repeated-page-margins: false
+    # Optional semicolon-separated EXACT lines, removed only at page/document edges.
+    known-margin-lines: ""
